@@ -3,10 +3,9 @@
 
 import csv
 import json
-import sys
 import os
-import argparse
-import subprocess
+import re
+import sys
 
 from collections import defaultdict, Mapping, namedtuple
 from datetime import datetime
@@ -18,9 +17,9 @@ from subprocess import Popen, PIPE, DEVNULL, check_output as sh
 import numpy as np
 import cv2
 
-from click import Context, confirm, command, option, progressbar as progress
+from click import Context, confirm, command, option, argument, progressbar as progress
 
-from .merge import merge
+from merge import merge
 
 
 QUIET = False
@@ -78,11 +77,19 @@ class FFmpegVideo(object):
         
 class RoiMask(object):
     def __init__(self, height, width, boxes):
-        polygon = [(np.clip(np.array(box, dtype=np.float32).reshape((-1, 2)), 0.0, 1.0) * np.array([width, height], dtype=np.float32)).astype(np.int32) for box in boxes]
-        self.bbox = list(map(cv2.boundingRect, polygon))
-        self.polygon_area = list(map(cv2.contourArea, polygon))
+        polygons = [(np.clip(np.array(box, dtype=np.float32).reshape((-1, 2)), 0.0, 1.0) * np.array([width, height], dtype=np.float32)).astype(np.int32) for box in boxes]
+        
+        # Polygon should be at least 1 px wide
+        for box in polygons:
+            if np.array_equal(box[0], box[1]):
+                box[0][0] = box[0][0] - 1
+                box[0][1] = box[0][1] - 1
+                
+        self.bbox = list(map(cv2.boundingRect, polygons))
+        self.polygon_area = list(map(cv2.contourArea, polygons))
+        #print(polygons, self.bbox, self.polygon_area)
         full_mask = np.zeros((height, width), dtype = np.uint8)
-        cv2.fillPoly(full_mask, polygon, 1)
+        cv2.fillPoly(full_mask, polygons, 1)
         
         #timestamp_box_height = 40
         #cv2.rectangle(full_mask, (0, 0), (width, timestamp_box_height), 1, cv2.FILLED)
@@ -116,6 +123,7 @@ def speedup(src, dst, boxes):
     dst = FFmpegVideo(dst, 'w+', fps=15)
     
     mask = RoiMask(src.height, src.width, boxes)
+    #print(boxes, mask.polygon_area)
     fgbg = [cv2.createBackgroundSubtractorMOG2() for b in mask.bbox]
 
     def score(frame):  # motion_score_vector
@@ -127,6 +135,7 @@ def speedup(src, dst, boxes):
             yield float(np.count_nonzero(motion_eroded)) / mask.polygon_area[j]
 
 
+    screenshot = True
     last_written = float('-inf')
     start = datetime.now()
     
@@ -148,24 +157,30 @@ def speedup(src, dst, boxes):
         dst.write(frame)
         last_written = n
         
-        #if chunk_frames_written == 0:
-            #cv2.imwrite(chunk.file_path + '.jpg', frame[:, :, ::-1])
-            #print(chunk.file_path + '.jpg')
+        if screenshot:
+            cv2.imwrite(dst.file_path + '.jpg', frame[:, :, ::-1])
+            ###print(dst.file_path + '.jpg')
+            screenshot = False
             
     print(' took', datetime.now() - start)
 
 
 @command()
-def cli():
+@argument('uiks', nargs=-1)
+def cli(uiks):
     """
     For each uik/camera with high turnout, merge and speedup video.
     """
     
+    root = '/mnt/ftp/2018-Санкт-Петербург/'
     boxes = json.load(open('voteboxes.json'))
     
-    cams = [x for x in turnout() if int(x.turnout[:-1]) >= 70]
-    ncams = len(cams)
-    uiks = set(x.uik for x in cams)
+    if uiks:
+        ncams = sum(len(boxes[x]) for x in uiks)
+    else:
+        cams = [x for x in turnout() if int(x.turnout[:-1]) >= 70]
+        ncams = len(cams)
+        uiks = set(x.uik for x in cams)
     
     temp = '/mnt/2018-4TB-2/data/2018-Санкт-Петербург/concat/%(tik)s/%(uik)s_%(cam)s.mp4'
     dest = '/mnt/2018-4TB-2/data/2018-Санкт-Петербург/speedup/%(tik)s/%(uik)s_%(cam)s.mp4'
@@ -192,30 +207,31 @@ def cli():
                 print(' ...not marked')
                 continue
             
+            dst = dest % locals()
+            if exists(dst):
+                print('..skipped existing')
+                continue
+            
             tmp = temp % locals()
             if not exists(tmp):
                 if not exists(dirname(tmp)):
                     makedirs(dirname(tmp))
                 merge(camdir.iterdir(), tmp)
             
-            dst = dest % locals()
-            if exists(dst):
-                print('..skipped existing')
-                continue
             if not exists(dirname(dst)):
                 makedirs(dirname(dst))
-            print('speedup: ..', end='')
+            print('speedup: ..', end='', flush=True)
             speedup(tmp, dst, urna)
             os.remove(tmp)
     return
             
             
 def turnout():
-    csv = csv.reader(open('good.csv'), delimiter=',')
-    next(csv, None)  # skip the headers
+    data = csv.reader(open('good.csv'), delimiter=',')
+    next(data, None)  # skip the headers
     
     Row = namedtuple('row', 'tik, uik, voters, turnout, putin, stationary, cam, gaps')
-    for row in csv:
+    for row in data:
         yield Row(*row)
     #return {Row(*x).uik: Row(*x) for x in csv}
 
