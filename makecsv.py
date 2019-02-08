@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-import re
+import csv
 import json
-
+import re
+    
 from datetime import datetime
-from collections import defaultdict, Mapping
+from collections import defaultdict, Mapping, namedtuple
 from itertools import chain
 from os.path import exists
 from pathlib import Path
@@ -49,23 +50,39 @@ def cli(file=None, quiet=False,
     """
     global QUIET
     QUIET = quiet
-    import csv
     turnreport = turnout()
-    votereport = voters()
+    votes = voters()
+    statsreport = stats()
+    putin = putindata()
+    
+    def st(uik): 
+        koib = ''
+        mnin, mnout = '?', '?'
+        result = statsreport.get(uik, [])
+        if result:
+            if result[6] == '1':
+                koib = 'КОИБ'
+            elif result[6] == '2':
+                koib = 'КЭГ'
+            mnin, mnout = result[4], result[5]
+        #return votes[uik].mnin, mnin, votes[uik].mnout, mnout, koib
+        return mnin, mnout, koib
+        #return ('?', '?', '?')
+    
     boxes = json.load(open('voteboxes.json'))
     report = {} 
     for tik, uiks in json.load(open('rr.json')).items():
         for uik in uiks:
             report[uik] = uiks[uik]
         
-    head = 'tik uik voters turnout putin stationary cam marked gaps'.split()
+    head = 'tik uik voters turnout putin stationary cam marked gaps mn_in mn_out koib'.split()
     
     allrows = []
     absent = csv.writer(open('absent.csv', 'w+'))
     absent.writerow(head)
     
     for uik in sorted(set(turnreport) - set(report), key=lambda x: -float(turnreport[x].turnout[:-1])):
-        row = turnreport[uik] + (votereport[uik].stationary, '', '', 'missing')
+        row = turnreport[uik] + (putin[uik], votes[uik].stationary, '', '', 'missing') + st(uik)
         absent.writerow(row)
         allrows.append(row)
         
@@ -104,7 +121,7 @@ def cli(file=None, quiet=False,
         if not uikgaps:
             for cam in report[uik]:
                 marked = 'yes' if boxes[uik][cam]['boxes'] else ''
-                row = turnreport[uik] + (votereport[uik].stationary, cam, marked, '')
+                row = turnreport[uik] + (putin[uik], votes[uik].stationary, cam, marked, '') + st(uik)
                 goodcsv.writerow(row)
                 if marked:
                     goodmarkedcsv.writerow(row)
@@ -113,7 +130,7 @@ def cli(file=None, quiet=False,
             for cam in report[uik]:
                 marked = 'yes' if boxes[uik][cam]['boxes'] else ''
                 gap = ', '.join(map(str, gaps[cam]))
-                row = turnreport[uik] + (votereport[uik].stationary, cam, marked, gap)
+                row = turnreport[uik] + (putin[uik], votes[uik].stationary, cam, marked, gap) + st(uik)
                 badcsv.writerow(row)
                 allrows.append(row)
                 
@@ -122,25 +139,42 @@ def cli(file=None, quiet=False,
     
     
 def turnout():
-    import csv
-    from collections import namedtuple
-    csv = csv.reader(open('turnout.csv'), delimiter=',')
-    next(csv, None)  # skip the headers
+    data = csv.reader(open('turnout.csv'), delimiter=',')
+    next(data, None)  # skip the headers
     
-    Row = namedtuple('row', 'tik, uik, voters, turnout, putin')
-    return {Row(*x).uik: Row(*x) for x in csv}
+    Row = namedtuple('row', 'tik, uik, voters, turnout')
+    new = lambda x: Row(*x[:len(Row._fields)])
+    return {new(x).uik: new(x) for x in data}
+
+def stats():
+    data = csv.reader(open('stats.csv'), delimiter=',')
+    next(data, None)  # skip the headers
+    
+    Row = namedtuple('row', 'tik, raion, uik, voters, mn_in, mn_out, koib')
+    new = lambda x: Row(*x[:len(Row._fields)])
+    #for row in data:
+        #try:
+            #Row(*row[:len(Row._fields)])
+        #except:
+            #print(row)
+            #raise
+    return {new(x).uik: new(x) for x in data}
 
 
 def voters():
-    import csv
-    from collections import namedtuple
-    csv = csv.reader(open('spb_2018.csv'), delimiter=',')
-    next(csv, None)  # skip the headers
+    data = csv.reader(open('spb_2018.csv'), delimiter=',')
+    next(data, None)  # skip the headers
     
     Row = namedtuple('row', 'id, reg, tik, uik, totjan, mnin, mnout, excl, totmarch, t10, t12, t15, t18, totvoters, got, pre, given, out, dicard, mob, stationary')
     new = lambda x: Row(*x[:len(Row._fields)])
-    return {new(x).uik: new(x) for x in csv}
+    return {new(x).uik: new(x) for x in data}
     
+def putindata():
+    data = csv.reader(open('spb_2018_calc_edt_4roman.csv'), delimiter=',')
+    next(data, None)  # skip the headers
+    
+    Row = namedtuple('row', 'tik, uik, vidano,  turnout, putin')
+    return {Row(*x).uik: f"{round(float(Row(*x).putin.replace(',', '.')) * 100)}%" for x in data}
 
 if __name__ == '__main__':
     cli()

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# Usage: python3 speedup_video.py -i input.mp4 -o tmp_dir
 
 import csv
 import json
@@ -19,6 +18,7 @@ import cv2
 
 from click import Context, confirm, command, option, argument, progressbar as progress
 
+from more_itertools import windowed
 from merge import merge
 
 
@@ -96,22 +96,6 @@ class RoiMask(object):
         
         self.roi_mask = [full_mask[y : y + h, x : x + w] != 1 for x, y, w, h in self.bbox]
 
-
-def buffer_half(iterable, fps):
-    fps = int(fps // 4)
-    buf = []
-    for n, elem in enumerate(iterable):
-        buf.append(elem)
-        if n < fps:
-            continue
-        if len(buf) > fps * 2 + 1:
-            del buf[0]
-        yield buf[-fps - 1], buf
-
-    for i in range(fps):
-        del buf[0]
-        yield buf[fps], buf
-            
             
 def speedup(src, dst, boxes):
     """
@@ -127,23 +111,22 @@ def speedup(src, dst, boxes):
     fgbg = [cv2.createBackgroundSubtractorMOG2() for b in mask.bbox]
 
     def score(frame):  # motion_score_vector
+        _score = []
         for j, (x, y, w, h) in enumerate(mask.bbox):
             motion = fgbg[j].apply(frame[y : y + h, x : x + w])
             motion_eroded = cv2.erode(motion, np.ones((2, 2), dtype = np.uint8))
             motion_eroded[mask.roi_mask[j]] = 0.0
             motion_eroded = motion_eroded > 254
-            yield float(np.count_nonzero(motion_eroded)) / mask.polygon_area[j]
-
+            _score.append(float(np.count_nonzero(motion_eroded)) / mask.polygon_area[j])
+        return frame, _score
 
     screenshot = True
     last_written = float('-inf')
     start = datetime.now()
     
-    framestream = buffer_half(((x, list(score(x))) for x in src), src.fps)
-    
-    for n, ((frame, _), buf) in enumerate(framestream):
-        signal = np.array([b[1] for b in buf], dtype=np.float32)
-        speed = (fast + (slow - fast) * np.clip(signal.max(axis=0) / level, 0.0, 1.0)).min()
+    for n, win in enumerate(windowed(map(score, src), 20)):
+        scores = np.array([score for (frame, score) in win], dtype=np.float32)
+        speed = (fast + (slow - fast) * np.clip(scores.max(axis=0) / level, 0.0, 1.0)).min()
 
         if n % 10000 == 0:
             print('.', end='', flush=True)
@@ -151,6 +134,7 @@ def speedup(src, dst, boxes):
         if n - last_written < speed:
             continue
 
+        frame, _score = win[10]
         for x, y, w, h in mask.bbox:
             cv2.rectangle(frame, (x, y), (x + w, y + h), RED)
 
@@ -167,32 +151,42 @@ def speedup(src, dst, boxes):
 
 @command()
 @argument('uiks', nargs=-1)
-def cli(uiks):
+@option('--turnout_min', '-tumin', default=0)
+@option('--turnout_max', '-tumax', default=100)
+@option('--timestart', '-ts', default='07-45')
+@option('--timeend', '-te', default='20-00')
+def cli(uiks, turnout_min, turnout_max, timestart, timeend):
     """
     For each uik/camera with high turnout, merge and speedup video.
     """
     
-    root = '/mnt/ftp/2018-Санкт-Петербург/'
+    h, m = (int(x) for x in timestart.split('-'))
+    tstart = datetime(2018, 3, 18, h, m)
+    
+    h, m = (int(x) for x in timeend.split('-'))
+    tend = datetime(2018, 3, 18, h, m)
+    
+    root = '/mnt/ftp/2018-Spb/'
     boxes = json.load(open('voteboxes.json'))
     
     if uiks:
         ncams = sum(len(boxes[x]) for x in uiks)
     else:
-        cams = [x for x in turnout() if int(x.turnout[:-1]) >= 70]
+        cams = [x for x in turnout_csv() if int(turnout_min) <= int(x.turnout[:-1]) <= int(turnout_max)]
         ncams = len(cams)
         uiks = set(x.uik for x in cams)
     
-    temp = '/mnt/2018-4TB-2/data/2018-Санкт-Петербург/concat/%(tik)s/%(uik)s_%(cam)s.mp4'
-    dest = '/mnt/2018-4TB-2/data/2018-Санкт-Петербург/speedup/%(tik)s/%(uik)s_%(cam)s.mp4'
+    temp = '/mnt/2018-4TB-2/data/2018-Spb/concat/%(tik)s/%(uik)s_%(cam)s.mp4'
+    dest = '/mnt/2018-4TB-2/data/2018-Spb/speedup/%(tik)s/%(uik)s_%(cam)s.mp4'
     
     n = 0
-    for tikdir in Path(root).iterdir():
-        tik = re.search('СПБ-2018-ТИК-(\d+)-.*', tikdir.name)
+    for tikdir in sorted(Path(root).iterdir()):
+        tik = re.search('spb-2018-TIK-(\d+)-.*', tikdir.name)
         if not tik:
             continue
         tik = 'TIK-' + tik.group(1)
-        echo(tik)
-        for camdir in tikdir.iterdir():
+        #echo(tik)
+        for camdir in sorted(tikdir.iterdir()):
             uik, cam = re.search('r78_u(\d+)_(.+)', camdir.name).groups()
             
             #if not uik == '231':
@@ -216,7 +210,7 @@ def cli(uiks):
             if not exists(tmp):
                 if not exists(dirname(tmp)):
                     makedirs(dirname(tmp))
-                merge(camdir.iterdir(), tmp)
+                merge(camdir.iterdir(), tmp, tstart, tend)
             
             if not exists(dirname(dst)):
                 makedirs(dirname(dst))
@@ -226,7 +220,7 @@ def cli(uiks):
     return
             
             
-def turnout():
+def turnout_csv():
     data = csv.reader(open('good.csv'), delimiter=',')
     next(data, None)  # skip the headers
     

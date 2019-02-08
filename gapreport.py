@@ -85,13 +85,21 @@ def gapreport(root, report, duration=900, maxdiff=2,
               skip_good=True, skip_diff_err=True, skip_dur_err=True, skip_invalid=True):
     boxes = json.load(open('boxes.json'))
     voteboxes = defaultdict(dict)
-    for tikdir in Path(root).iterdir():
-        tik = re.search('СПБ-2018-ТИК-(\d+)-.*', tikdir.name)
+    #root = Path(root)
+    #root.rename(root.parent / '2018-Spb')
+    #return
+    for tikdir in sorted(Path(root).iterdir()):
+        tik = re.search('spb-2018-TIK-(\d+)-.*', tikdir.name)
         if not tik:
             continue
+        
+        #name = tikdir.name.replace('СПБ', 'spb').replace('ТИК', 'TIK').replace('УИК', 'UIK')
+        #print(name)
+        #tikdir.rename(tikdir.parent / name)
+        #continue
         tik = 'TIK-' + tik.group(1)
         echo(tik)
-        for camdir in tikdir.iterdir():
+        for camdir in sorted(tikdir.iterdir()):
             uik, cam = re.search('r78_u(\d+)_(.+)', camdir.name).groups()
             echo(uik, cam, ' ', end='')
             camdata = report[tik][uik][cam]
@@ -100,12 +108,22 @@ def gapreport(root, report, duration=900, maxdiff=2,
                 '10:45 11:00 11:15 11:30 11:45 12:00 12:15 12:30 12:45 13:00 13:15 13:30 13:45 '
                 '14:00 14:15 14:30 14:45 15:00 15:15 15:30 15:45 16:00 16:15 16:30 16:45 17:00 '
                 '17:15 17:30 17:45 18:00 18:15 18:30 18:45 19:00 19:15 19:30 19:45'.split())
-            for file in camdir.iterdir():
+            for file in sorted(camdir.iterdir()):
                 #camid = str(file.stem).split('_')[-1]
                 #break
                 begin, end = re.search(r'(\d{10})_(\d{10})?', str(file.stem)).groups()
                 begin = datetime.utcfromtimestamp(float(begin) + 3 * 3600)  # MSK
+                #prefix = begin.strftime('%H-%M_')
+                #if not file.name.startswith(prefix):
+                    ##import ipdb; ipdb.sset_trace()
+                    #print(file)
+                    #file.rename(file.parent / (prefix + file.name.replace('segment_', '')))
+                    ##os.rename(file,  + file)
+                    
+                #break
                 interval -= {begin.strftime('%H:%M'),}
+            #break
+            #continue
             if interval:
                 printchar('M ', interval)
                 camdata['missing'] = ' '.join(sorted(interval))
