@@ -1,0 +1,7 @@
+### spb
+#TIK_PATTERN="spb-2018-TIK-(\d+)-.*"
+#UIK_PATTERN="r78_u(\d+)_(.+)"
+
+### LO
+TIK_PATTERN="TIK-(\w+)-.*"
+UIK_PATTERN="r47_u(\d+)_(.+)"
