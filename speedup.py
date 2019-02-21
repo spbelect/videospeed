@@ -79,7 +79,9 @@ class FFmpegVideo(object):
         
 class RoiMask(object):
     def __init__(self, height, width, boxes):
-        polygons = [(np.clip(np.array(box, dtype=np.float32).reshape((-1, 2)), 0.0, 1.0) * np.array([width, height], dtype=np.float32)).astype(np.int32) for box in boxes]
+        polygons = [np.array([[round(x*width), round(y*height)] for x, y in box]) for box in boxes]
+        
+        #polygons = [(np.clip(np.array(box, dtype=np.float32).reshape((-1, 2)), 0.0, 1.0) * np.array([width, height], dtype=np.float32)).astype(np.int32) for box in boxes]
         
         # Polygon should be at least 1 px wide
         for box in polygons:
@@ -147,6 +149,8 @@ def speedup(src, dst, boxes):
             cv2.imwrite(dst.file_path + '.jpg', frame[:, :, ::-1])
             ###print(dst.file_path + '.jpg')
             screenshot = False
+            #break
+            
             
     print(' took', datetime.now() - start)
 
@@ -229,8 +233,8 @@ def cli(uiks, turnout_min, turnout_max, timestart, timeend, root, region):
 def turnout_csv():
     data = csv.reader(open('good.csv'), delimiter=',')
     next(data, None)  # skip the headers
-    
-    Row = namedtuple('row', 'tik, uik, voters, turnout, putin, stationary, cam, gaps')
+
+    Row = namedtuple('row', 'tik uik voters turnout putin stationary cam marked gaps mn_in mn_out koib')
     for row in data:
         yield Row(*row)
     #return {Row(*x).uik: Row(*x) for x in csv}
