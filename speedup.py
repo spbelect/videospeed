@@ -14,12 +14,14 @@ from pathlib import Path
 from subprocess import Popen, PIPE, DEVNULL, check_output as sh
 
 import numpy as np
+import click
 import cv2
 
 from click import Context, confirm, command, option, argument, progressbar as progress
 
 from more_itertools import windowed
 from merge import merge
+from regions import regions
 
 
 QUIET = False
@@ -151,23 +153,27 @@ def speedup(src, dst, boxes):
 
 @command()
 @argument('uiks', nargs=-1)
+@option('--root', '-rd', type=click.Path(exists=True), envvar='ROOT', help='Root dir of region')
+@option('--region', '-rn', default='78', prompt=True, help='Region number')
 @option('--turnout_min', '-tumin', default=0)
 @option('--turnout_max', '-tumax', default=100)
 @option('--timestart', '-ts', default='07-45')
 @option('--timeend', '-te', default='20-00')
-def cli(uiks, turnout_min, turnout_max, timestart, timeend):
+def cli(uiks, turnout_min, turnout_max, timestart, timeend, root, region):
     """
     For each uik/camera with high turnout, merge and speedup video.
     """
     
+    if not root:
+        root = regions[region]['root_dir']
+        
     h, m = (int(x) for x in timestart.split('-'))
     tstart = datetime(2018, 3, 18, h, m)
     
     h, m = (int(x) for x in timeend.split('-'))
     tend = datetime(2018, 3, 18, h, m)
     
-    root = '/mnt/ftp/2018-Spb/'
-    boxes = json.load(open('voteboxes.json'))
+    boxes = json.load(open('voteboxes.json'))[region]
     
     if uiks:
         ncams = sum(len(boxes[x]) for x in uiks)
@@ -176,18 +182,18 @@ def cli(uiks, turnout_min, turnout_max, timestart, timeend):
         ncams = len(cams)
         uiks = set(x.uik for x in cams)
     
-    temp = '/mnt/2018-4TB-2/data/2018-Spb/concat/%(tik)s/%(uik)s_%(cam)s.mp4'
-    dest = '/mnt/2018-4TB-2/data/2018-Spb/speedup/%(tik)s/%(uik)s_%(cam)s.mp4'
+    temp = root + '/concat/%(tik)s/%(uik)s_%(cam)s.mp4'
+    dest = root + '/speedup/%(tik)s/%(uik)s_%(cam)s.mp4'
     
     n = 0
     for tikdir in sorted(Path(root).iterdir()):
-        tik = re.search('spb-2018-TIK-(\d+)-.*', tikdir.name)
+        tik = re.search(regions[region]['tik_pattern'], tikdir.name)
         if not tik:
             continue
         tik = 'TIK-' + tik.group(1)
         #echo(tik)
         for camdir in sorted(tikdir.iterdir()):
-            uik, cam = re.search('r78_u(\d+)_(.+)', camdir.name).groups()
+            uik, cam = re.search(regions[region]['uik_pattern'], camdir.name).groups()
             
             #if not uik == '231':
             if uik not in uiks:

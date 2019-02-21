@@ -1,7 +1,5 @@
 ### spb
-#TIK_PATTERN="spb-2018-TIK-(\d+)-.*"
-#UIK_PATTERN="r78_u(\d+)_(.+)"
-
-### LO
-TIK_PATTERN="TIK-(\w+)-.*"
-UIK_PATTERN="r47_u(\d+)_(.+)"
+#TIK_PATTERN="spb-2018-TIK-(\\d+)-.*"
+#UIK_PATTERN="r78_u(\\d+)_(.+)"
+#ROOT=/mnt/ftp/2018-Spb/
+#GAPFILE=gaps_78.json

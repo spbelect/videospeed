@@ -11,6 +11,8 @@ from subprocess import Popen, PIPE
 import click
 import environ
 
+from regions import regions
+
 
 env = environ.Env()
 
@@ -42,6 +44,7 @@ def update(target, source):
             target[key] = source[key]
     return target
 
+### spb
 
 def timestamps(file):
     """ Iterate over Presentation Timestamps of packets. """
@@ -53,21 +56,25 @@ def timestamps(file):
        
        
 @click.command()
-@click.argument('root')
+@click.option('--root', '-rd', type=click.Path(exists=True), envvar='ROOT', help='Root dir of region')
 @click.option('--file', '-f', help='JSON file to write the report.',
-              type=click.Path(dir_okay=False, writable=True))
+              type=click.Path(dir_okay=False, writable=True), envvar='GAPFILE')
+@click.option('--region', '-rn', default='78', prompt=True, help='Region number')
 @click.option('--quiet', '-q', is_flag=True, default=False, help='Do not print progress to stdout')
 @click.option('--skip-good/--no-skip-good', default=True)
 @click.option('--skip-invalid/--no-skip-invalid', default=True, help='Skip invalid files')
 @click.option('--skip-dur-err/--no-skip-dur-err', default=True, help='Skip files with duration error')
 @click.option('--skip-diff-err/--no-skip-diff-err', default=True, help='Skip files with max diff error')
-def cli(root, duration=900, maxdiff=2, file=None, quiet=False, 
+def cli(region, root=None, duration=900, maxdiff=2, file=None, quiet=False, 
         skip_good=True, skip_diff_err=True, skip_dur_err=True, skip_invalid=True):
     """
     Generate json gap report for tik/uik_cam video files starting from root dir.
     """
     global QUIET
     QUIET = quiet
+    if not root:
+        root = regions[region]['root_dir']
+        
     report = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(dict))))
     if file and exists(file):
         data = open(file).read()
@@ -81,7 +88,7 @@ def cli(root, duration=900, maxdiff=2, file=None, quiet=False,
                 update(report, data)
         
     try:
-        gapreport(root, report, duration, maxdiff, skip_good, skip_diff_err, skip_dur_err, skip_invalid)
+        gapreport(root, region, report, duration, maxdiff, skip_good, skip_diff_err, skip_dur_err, skip_invalid)
     finally:
         report = json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False)
         if file:
@@ -90,15 +97,16 @@ def cli(root, duration=900, maxdiff=2, file=None, quiet=False,
             print(report)
         
     
-def gapreport(root, report, duration=900, maxdiff=2, 
+def gapreport(root, region, report, duration=900, maxdiff=2, 
               skip_good=True, skip_diff_err=True, skip_dur_err=True, skip_invalid=True):
     boxes = json.load(open('boxes.json'))
-    voteboxes = defaultdict(dict)
+    voteboxes = defaultdict(lambda: defaultdict(dict))
+    update(voteboxes, json.load(open('voteboxes.json')))
     #root = Path(root)
     #root.rename(root.parent / '2018-Spb')
     #return
     for tikdir in sorted(Path(root).iterdir()):
-        tik = re.search(env('TIK_PATTERN'), tikdir.name)
+        tik = re.search(regions[region]['tik_pattern'], tikdir.name)
         if not tik:
             continue
         
@@ -109,36 +117,35 @@ def gapreport(root, report, duration=900, maxdiff=2,
         tik = 'TIK-' + tik.group(1)
         echo(tik)
         for camdir in sorted(tikdir.iterdir()):
-            uik, cam = re.search(env('UIK_PATTERN'), camdir.name).groups()
+            uik, cam = re.search(regions[region]['uik_pattern'], camdir.name).groups()
             echo(uik, cam, ' ', end='')
             camdata = report[tik][uik][cam]
             
-            #interval = set('08:00 08:15 08:30 08:45 09:00 09:15 09:30 09:45 10:00 10:15 10:30 '
-                #'10:45 11:00 11:15 11:30 11:45 12:00 12:15 12:30 12:45 13:00 13:15 13:30 13:45 '
-                #'14:00 14:15 14:30 14:45 15:00 15:15 15:30 15:45 16:00 16:15 16:30 16:45 17:00 '
-                #'17:15 17:30 17:45 18:00 18:15 18:30 18:45 19:00 19:15 19:30 19:45'.split())
+            interval = set('08:00 08:15 08:30 08:45 09:00 09:15 09:30 09:45 10:00 10:15 10:30 '
+                '10:45 11:00 11:15 11:30 11:45 12:00 12:15 12:30 12:45 13:00 13:15 13:30 13:45 '
+                '14:00 14:15 14:30 14:45 15:00 15:15 15:30 15:45 16:00 16:15 16:30 16:45 17:00 '
+                '17:15 17:30 17:45 18:00 18:15 18:30 18:45 19:00 19:15 19:30 19:45'.split())
             for file in sorted(camdir.iterdir()):
                 #camid = str(file.stem).split('_')[-1]
                 #break
                 begin, end = re.search(r'(\d{10})_(\d{10})?', str(file.stem)).groups()
                 begin = datetime.utcfromtimestamp(float(begin) + 3 * 3600)  # MSK
-                prefix = begin.strftime('%H-%M_')
-                if not file.name.startswith(prefix):
-                    ##import ipdb; ipdb.sset_trace()
-                    print(file)
-                    file.rename(file.parent / (prefix + file.name.replace('segment_', '')))
+                #prefix = begin.strftime('%H-%M_')
+                #if not file.name.startswith(prefix):
+                    #print(file)
+                    #file.rename(file.parent / (prefix + file.name.replace('segment_', '')))
                     
                 #break
-                #interval -= {begin.strftime('%H:%M'),}
-            break
+                interval -= {begin.strftime('%H:%M'),}
+            #break
             #continue
             if interval:
-                printchar('M ', interval)
+                printchar('M ', ' '.join(sorted(interval)))
                 camdata['missing'] = ' '.join(sorted(interval))
             #if not boxes.get(camid, {}).get('boxes'):
                 #print(tik, uik, cam, camid, dict(report[tik][uik][cam]))
             
-            #voteboxes[uik][cam] = {'id': camid, 'boxes': boxes.get(camid, {}).get('boxes', [])}
+            #voteboxes[region][uik][cam] = {'id': camid, 'boxes': boxes.get(camid, {}).get('boxes', [])}
             #continue
 
             if camdata.get('status'):
@@ -147,11 +154,11 @@ def gapreport(root, report, duration=900, maxdiff=2,
                     if skip_good:
                         echo('skip good')
                         continue
-                    for file in camdir.iterdir():
+                    for file in sorted(camdir.iterdir()):
                         check_one(file, camdata, duration, maxdiff)
                 else:
                     # Some camera file has errors.
-                    for file in camdir.iterdir():
+                    for file in sorted(camdir.iterdir()):
                         if file.name in camdata:
                             # File has errors.
                             if skip_invalid and skip_diff_err and skip_dur_err:
@@ -172,11 +179,10 @@ def gapreport(root, report, duration=900, maxdiff=2,
                         
             else:
                 # Camera not checked yet.
-                for file in camdir.iterdir():
+                for file in sorted(camdir.iterdir()):
                     check_one(file, camdata, duration, maxdiff)
             camdata['status'] = 'checked'
             echo()
-        break
     #xr = json.dumps(voteboxes, indent=2, sort_keys=True, ensure_ascii=False)
     #open('voteboxes.json', 'wb+').write(xr.encode('utf8'))
 
