@@ -180,7 +180,7 @@ def cli(uiks, turnout_min, turnout_max, timestart, timeend, region):
     if uiks:
         ncams = sum(len(boxes[x]) for x in uiks)
     else:
-        cams = [x for x in turnout_csv() if int(turnout_min) <= int(x.turnout[:-1]) <= int(turnout_max)]
+        cams = [x for x in turnout_csv(region) if int(turnout_min) <= int(x.turnout[:-1]) <= int(turnout_max)]
         ncams = len(cams)
         uiks = set(x.uik for x in cams)
     
@@ -228,14 +228,22 @@ def cli(uiks, turnout_min, turnout_max, timestart, timeend, region):
     return
             
             
-def turnout_csv():
-    data = csv.reader(open('good.csv'), delimiter=',')
-    next(data, None)  # skip the headers
+def turnout_csv(region):
+    if region == '47':
+        data = csv.reader(open('47_good_marked.csv'), delimiter=',')
+        next(data, None)  # skip the headers
 
-    Row = namedtuple('row', 'tik uik voters turnout putin stationary cam marked gaps mn_in mn_out koib')
-    for row in data:
-        yield Row(*row)
-    #return {Row(*x).uik: Row(*x) for x in csv}
+        Row = namedtuple('row', 'tik uik turnout stationary putin koib cam marked gaps')
+        for row in data:
+            yield Row(*row)
+    else:
+        data = csv.reader(open('good.csv'), delimiter=',')
+        next(data, None)  # skip the headers
+
+        Row = namedtuple('row', 'tik uik voters turnout putin stationary cam marked gaps mn_in mn_out koib')
+        for row in data:
+            yield Row(*row)
+        #return {Row(*x).uik: Row(*x) for x in csv}
 
 
 if __name__ == '__main__':

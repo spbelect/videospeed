@@ -12,6 +12,10 @@ from subprocess import Popen, PIPE
 
 import click
 
+from click import Context, confirm, command, option, argument
+
+from regions import regions
+
 
 QUIET = False
 
@@ -19,7 +23,7 @@ echo = lambda *a, **kw: not QUIET and print(*a, **kw)
 
 printchar = lambda *a, **kw: echo(*a, end='', flush=True, **kw)
 
-click.Context.get_usage = click.Context.get_help  # show full help on error
+Context.get_usage = Context.get_help  # show full help on error
 
 
 def update(target, source):
@@ -35,102 +39,112 @@ def update(target, source):
     return target
 
        
-@click.command()
-@click.option('--file', '-f', help='JSON file to write the report.',
-              type=click.Path(dir_okay=False, writable=True))
-@click.option('--quiet', '-q', is_flag=True, default=False, help='Do not print progress to stdout')
-@click.option('--skip-good/--no-skip-good', default=True)
-@click.option('--skip-invalid/--no-skip-invalid', default=True, help='Skip invalid files')
-@click.option('--skip-dur-err/--no-skip-dur-err', default=True, help='Skip files with duration error')
-@click.option('--skip-diff-err/--no-skip-diff-err', default=True, help='Skip files with max diff error')
-def cli(file=None, quiet=False, 
-        skip_good=True, skip_diff_err=True, skip_dur_err=True, skip_invalid=True):
+@command()
+@option('--region', '-rn', default='78', prompt=True, help='Region number')
+def cli(region):
     """
-    Generate json gap report for tik/uik_cam video files starting from root dir.
+    Generate csv files.
     """
-    global QUIET
-    QUIET = quiet
     turnreport = turnout()
     votes = voters()
     statsreport = stats()
     putin = putindata()
     
-    def st(uik): 
-        koib = ''
-        mnin, mnout = '?', '?'
-        result = statsreport.get(uik, [])
-        if result:
-            if result[6] == '1':
-                koib = 'КОИБ'
-            elif result[6] == '2':
-                koib = 'КЭГ'
-            mnin, mnout = result[4], result[5]
-        #return votes[uik].mnin, mnin, votes[uik].mnout, mnout, koib
-        return mnin, mnout, koib
-        #return ('?', '?', '?')
-    
-    boxes = json.load(open('voteboxes.json'))
-    report = {} 
-    for tik, uiks in json.load(open('rr.json')).items():
-        for uik in uiks:
-            report[uik] = uiks[uik]
+    if region == '47':
+        regdata = {x.uik: x for x in lendata()}
+    else:
+        regdata = {x.uik: x for x in spbdata()}
         
-    head = 'tik uik voters turnout putin stationary cam marked gaps mn_in mn_out koib'.split()
+    #def st(uik):
+        #result = statsreport.get(uik, [])
+        #if not result:
+            #return '?', '?', ''
+        
+        #koib = ''
+        #if result.koib == '1':
+            #koib = 'КОИБ'
+        #elif result.koib == '2':
+            #koib = 'КЭГ'
+        #return result.mnin, result.mnout, koib
+    
+    boxes = json.load(open('voteboxes.json'))[region]
+    gapreport = {} 
+    for tik, uiks in json.load(open(regions[region]['gap_file'])).items():
+        for uik in uiks:
+            gapreport[uik] = uiks[uik]
+        
+    #head = 'tik uik voters turnout putin stationary cam marked gaps mn_in mn_out koib'.split()
+    head = 'tik uik turnout stationary putin koib cam marked gaps'.split()
     
     allrows = []
-    absent = csv.writer(open('absent.csv', 'w+'))
+    absent = csv.writer(open(f'{region}_absent.csv', 'w+'))
     absent.writerow(head)
     
-    for uik in sorted(set(turnreport) - set(report), key=lambda x: -float(turnreport[x].turnout[:-1])):
-        row = turnreport[uik] + (putin[uik], votes[uik].stationary, '', '', 'missing') + st(uik)
+    for uik in sorted(set(regdata) - set(gapreport), key=lambda x: -float(regdata[x].turnout[:-1])):
+        row = regdata[uik] + ('', '', 'missing')
         absent.writerow(row)
         allrows.append(row)
         
-    goodcsv = csv.writer(open('good.csv', 'w+'))
+    goodcsv = csv.writer(open(f'{region}_good.csv', 'w+'))
     goodcsv.writerow(head)
-    goodmarkedcsv = csv.writer(open('good_marked.csv', 'w+'))
+    goodmarkedcsv = csv.writer(open(f'{region}_good_marked.csv', 'w+'))
     goodmarkedcsv.writerow(head)
-    badcsv = csv.writer(open('bad.csv', 'w+'))
+    badcsv = csv.writer(open(f'{region}_bad.csv', 'w+'))
     badcsv.writerow(head)
-    allcsv = csv.writer(open('all.csv', 'w+'))
+    allcsv = csv.writer(open(f'{region}_all.csv', 'w+'))
     allcsv.writerow(head)
-    for uik in sorted(report, key=lambda x: -float(turnreport[x].turnout[:-1])):
-        good = True
+    for uik in sorted(gapreport, key=lambda x: -float(regdata[x].turnout[:-1])):
+        
         bad = False
-        verybad = False
-        #tik = report[uik].pop('tik')
-        gaps = defaultdict(list)
-        for cam, data in report[uik].items():
+        #verybad = False
+        #tik = gapreport[uik].pop('tik')
+        gaps = defaultdict(lambda: defaultdict(list))
+        #gapfiles = set()
+        for cam, data in gapreport[uik].items():
             #print(tik, uik, cam, data)
             data.pop('status')
             for file in data:
                 begin, end = re.search(r'(\d{10})_(\d{10})?', str(file)).groups()
                 begin = datetime.utcfromtimestamp(float(begin) + 3 * 3600)  # MSK
-                if 8 < begin.hour < 20:
+                if 8 <= begin.hour < 20:
                     diff = data[file].get('maxdiff_error')
                     if diff:
-                        gaps[cam].append(int(diff))
+                        gaps[cam][file[:5]].append(int(diff))
                     
                     dur = data[file].get('duration_error')
                     if dur:
-                        gaps[cam].append(int(900 - dur))
+                        gaps[cam][file[:5]].append(int(900 - dur))
                         
                     if 'no_timestamps' in data[file]:
-                        gaps[cam].append('X')
-        uikgaps = list(chain(*gaps.values()))
-        if not uikgaps:
-            for cam in report[uik]:
+                        gaps[cam][file[:5]].append('X')
+                    
+                    
+        good = True
+        if region == '47':
+            for cam in gaps.values():
+                for file in cam: 
+                    if not re.match('(08-45|15-00).*', file):
+                        good = False
+                        break
+        else:
+            good = not gaps
+             
+        #uikgaps = list(chain(*gaps.values()))
+        #import ipdb; ipdb.sset_trace()
+        if good:
+            for cam in gapreport[uik]:
                 marked = 'yes' if boxes[uik][cam]['boxes'] else ''
-                row = turnreport[uik] + (putin[uik], votes[uik].stationary, cam, marked, '') + st(uik)
+                gap = ', '.join(map(str, chain(*gaps[cam].values())))
+                row = regdata[uik] + (cam, marked, gap)
                 goodcsv.writerow(row)
                 if marked:
                     goodmarkedcsv.writerow(row)
                 allrows.append(row)
         else:
-            for cam in report[uik]:
+            for cam in gapreport[uik]:
                 marked = 'yes' if boxes[uik][cam]['boxes'] else ''
-                gap = ', '.join(map(str, gaps[cam]))
-                row = turnreport[uik] + (putin[uik], votes[uik].stationary, cam, marked, gap) + st(uik)
+                gap = ', '.join(map(str, chain(*gaps[cam].values())))
+                row = regdata[uik] + (cam, marked, gap)
                 badcsv.writerow(row)
                 allrows.append(row)
                 
@@ -165,7 +179,7 @@ def voters():
     data = csv.reader(open('spb_2018.csv'), delimiter=',')
     next(data, None)  # skip the headers
     
-    Row = namedtuple('row', 'id, reg, tik, uik, totjan, mnin, mnout, excl, totmarch, t10, t12, t15, t18, totvoters, got, pre, given, out, dicard, mob, stationary')
+    Row = namedtuple('row', 'id, reg, tik, uik, totjan, mnin, mnout, excl, totmarch, t10, t12, t15, t18, totvoters, got, pre, given, out, discard, mob, stationary')
     new = lambda x: Row(*x[:len(Row._fields)])
     return {new(x).uik: new(x) for x in data}
     
@@ -176,5 +190,37 @@ def putindata():
     Row = namedtuple('row', 'tik, uik, vidano,  turnout, putin')
     return {Row(*x).uik: f"{round(float(Row(*x).putin.replace(',', '.')) * 100)}%" for x in data}
 
+
+def lendata():
+    
+    params = csv.reader(open('lo-params.csv'), delimiter=',')
+    next(params, None)  # skip the headers
+    
+    Params = namedtuple('Params', 'region tik uik koib')
+    new = lambda x: Params(*x[:4])
+    params = {new(x).uik: new(x) for x in params}
+    
+    data = csv.reader(open('lenobl2018.csv'), delimiter=',')
+    next(data, None)  # skip the headers
+    
+    Row = namedtuple('row', 'pu turnout tik uik totjan t10 t12 t15 t18 totvoters got pre given out discard mob stationary')
+    
+    Result = namedtuple('Result', 'tik uik turnout stationary putin koib')
+    
+    for row in data:
+        x = Row(*row[:len(Row._fields)])
+        pu = f'{round(float(x.pu) * 100)}%'
+        turnout = f'{round(float(x.turnout) * 100)}%'
+        
+        par = params.get(x.uik)
+        koib = ''
+        if par and par.koib == '1':
+            koib = 'КОИБ'
+        elif par and par.koib == '2':
+            koib = 'КЭГ'
+            
+        yield Result(x.tik, x.uik, turnout, x.stationary, pu, koib)
+        #{Row(*x).uik: f"{)}%" for x in data}
+    
 if __name__ == '__main__':
     cli()
