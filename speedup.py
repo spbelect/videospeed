@@ -164,7 +164,8 @@ def speedup(src, dst, boxes):
 @option('--turnout_max', '-tumax', default=100)
 @option('--timestart', '-ts', default='07-45')
 @option('--timeend', '-te', default='20-00')
-def cli(uiks, turnout_min, turnout_max, timestart, timeend, region):
+@option('--force', '-f', is_flag=True, default=False)
+def cli(uiks, turnout_min, turnout_max, timestart, timeend, region, force):
     """
     For each uik/camera with high turnout, merge and speedup video.
     """
@@ -210,7 +211,7 @@ def cli(uiks, turnout_min, turnout_max, timestart, timeend, region):
                 continue
             
             dst = dest % locals()
-            if exists(dst):
+            if exists(dst) and not force:
                 print('..skipped existing')
                 continue
             
