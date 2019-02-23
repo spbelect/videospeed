@@ -73,7 +73,7 @@ def cli(region, root=None, duration=900, maxdiff=2, file=None, quiet=False,
     global QUIET
     QUIET = quiet
     if not root:
-        root = regions[region]['root_dir']
+        root = regions[region]['src_dir']
         
     report = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(dict))))
     if file and exists(file):

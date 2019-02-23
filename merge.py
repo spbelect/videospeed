@@ -71,8 +71,10 @@ def merge(files, dst, timestart=None, timeend=None):
     cmd = 'ffmpeg -nostats -hide_banner -avoid_negative_ts make_zero -fflags +genpts -f concat -safe 0' \
         ' -protocol_whitelist file,pipe -i - -c copy -flags +global_header -movflags +faststart -y '
     #print(cmd + dst)
-    pipe = Popen(cmd + dst, stdin=PIPE, stderr=DEVNULL, shell=True)
-    pipe.communicate('\n'.join(reversed(input)).encode('utf8'))
+    pipe = Popen(cmd + dst, stdin=PIPE, stderr=PIPE, shell=True)
+    stdout, stderr = pipe.communicate('\n'.join(reversed(input)).encode('utf8'))
+    if pipe.returncode != 0:
+        raise Exception(stderr.decode('utf8'))
     print()
 
 

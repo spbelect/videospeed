@@ -50,8 +50,10 @@ class FFmpegVideo(object):
         self.fps = fps
 
         if mode == 'r':
-            self.height, self.width, self.fps_, self.num_frames = list(map(json.loads(sh(['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_streams', self.file_path]).decode('utf-8'))['streams'][0].get, ['height', 'width', 'avg_frame_rate', 'nb_frames']))
-            self.num_frames = int(self.num_frames)
+            cmd = 'ffprobe -v quiet -print_format json -show_streams ' + self.file_path
+            params = json.loads(sh(cmd, shell=True).decode('utf-8'))['streams'][0]
+            self.height, self.width = params['height'], params['width'], 
+            self.fps_, self.num_frames = params['avg_frame_rate'], int(params['nb_frames'])
             if fps is None:
                 self.fps = float(self.fps_.split('/')[0]) / float(self.fps_.split('/')[1])
             else:
@@ -157,20 +159,16 @@ def speedup(src, dst, boxes):
 
 @command()
 @argument('uiks', nargs=-1)
-@option('--root', '-rd', type=click.Path(exists=True), envvar='ROOT', help='Root dir of region')
 @option('--region', '-rn', default='78', prompt=True, help='Region number')
 @option('--turnout_min', '-tumin', default=0)
 @option('--turnout_max', '-tumax', default=100)
 @option('--timestart', '-ts', default='07-45')
 @option('--timeend', '-te', default='20-00')
-def cli(uiks, turnout_min, turnout_max, timestart, timeend, root, region):
+def cli(uiks, turnout_min, turnout_max, timestart, timeend, region):
     """
     For each uik/camera with high turnout, merge and speedup video.
     """
     
-    if not root:
-        root = regions[region]['root_dir']
-        
     h, m = (int(x) for x in timestart.split('-'))
     tstart = datetime(2018, 3, 18, h, m)
     
@@ -186,11 +184,11 @@ def cli(uiks, turnout_min, turnout_max, timestart, timeend, root, region):
         ncams = len(cams)
         uiks = set(x.uik for x in cams)
     
-    temp = root + '/concat/%(tik)s/%(uik)s_%(cam)s.mp4'
-    dest = root + '/speedup/%(tik)s/%(uik)s_%(cam)s.mp4'
+    temp = regions[region]['dst_dir'] + '/concat/%(tik)s/%(uik)s_%(cam)s.mp4'
+    dest = regions[region]['dst_dir'] + '/speedup/%(tik)s/%(uik)s_%(cam)s.mp4'
     
     n = 0
-    for tikdir in sorted(Path(root).iterdir()):
+    for tikdir in sorted(Path(regions[region]['src_dir']).iterdir()):
         tik = re.search(regions[region]['tik_pattern'], tikdir.name)
         if not tik:
             continue
