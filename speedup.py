@@ -231,7 +231,7 @@ def cli(uiks, turnout_min, turnout_max, timestart, timeend, region, force):
             
 def turnout_csv(region):
     if region == '47':
-        data = csv.reader(open('47_good_marked.csv'), delimiter=',')
+        data = csv.reader(open('47_good.csv'), delimiter=',')
         next(data, None)  # skip the headers
 
         Row = namedtuple('row', 'tik uik turnout stationary putin koib cam marked gaps')
