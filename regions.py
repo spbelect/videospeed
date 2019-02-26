@@ -11,7 +11,7 @@ regions = {
         'tik_pattern': 'TIK-(\w+)-.*',
         'uik_pattern': 'r47_u(\d+)_(.+)',
         'src_dir': '/mnt/OLD-4TB-2/data/2018-lenobl/',
-        'dst_dir': '/mnt/OLD-4TB-2/data/2018-lenobl/',
+        'dst_dir': '/mnt/2018-4TB-2/data/2018-lenobl/',
         'gap_file': 'gaps_47.json'
     }
 } 
