@@ -185,7 +185,7 @@ def cli(uiks, turnout_min, turnout_max, timestart, timeend, region, force):
         ncams = len(cams)
         uiks = set(x.uik for x in cams)
     
-    temp = regions[region]['dst_dir'] + '/concat/%(tik)s/%(uik)s_%(cam)s.mp4'
+    temp = regions[region]['tmp_dir'] + '/%(tik)s/%(uik)s_%(cam)s.mp4'
     dest = regions[region]['dst_dir'] + '/speedup/%(tik)s/%(uik)s_%(cam)s.mp4'
     
     n = 0
