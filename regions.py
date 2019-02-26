@@ -5,7 +5,7 @@ regions = {
         'uik_pattern': 'r78_u(\d+)_(.+)',
         'src_dir': '/mnt/ftp/2018-Spb/',
         'dst_dir': '/mnt/2018-4TB-2/data/2018-Spb/',
-        'tmp_dir': '/mnt/2018-4TB-2/data/tmp_78_concat/',
+        'tmp_dir': '/mnt/2018-4TB-2/data/tmp/78_concat/',
         'gap_file': 'gaps_78.json'
     },
     '47': {
@@ -13,7 +13,7 @@ regions = {
         'uik_pattern': 'r47_u(\d+)_(.+)',
         'src_dir': '/mnt/OLD-4TB-2/data/2018-lenobl/',
         'dst_dir': '/mnt/2018-4TB-2/data/2018-lenobl/',
-        'tmp_dir': '/mnt/2018-4TB-2/data/tmp_47_concat/',
+        'tmp_dir': '/mnt/2018-4TB-2/data/tmp/47_concat/',
         'gap_file': 'gaps_47.json'
     }
 } 
