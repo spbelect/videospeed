@@ -162,31 +162,28 @@ def speedup(src, dst, boxes):
 @option('--region', '-rn', default='78', prompt=True, help='Region number')
 @option('--turnout_min', '-tumin', default=0)
 @option('--turnout_max', '-tumax', default=100)
-@option('--timestart', '-ts', default='07-45')
-@option('--timeend', '-te', default='20-00')
+#@option('--timestart', '-ts', default='07-45')
+#@option('--timeend', '-te', default='20-00')
 @option('--force', '-f', is_flag=True, default=False)
-def cli(uiks, turnout_min, turnout_max, timestart, timeend, region, force):
+def cli(uiks, turnout_min, turnout_max, region, force):
     """
     For each uik/camera with high turnout, merge and speedup video.
     """
     
-    h, m = (int(x) for x in timestart.split('-'))
-    tstart = datetime(2018, 3, 18, h, m)
+    ##h, m = (int(x) for x in timestart.split('-'))
+    #tstart = datetime(2018, 3, 18, 7, 45)
     
-    h, m = (int(x) for x in timeend.split('-'))
-    tend = datetime(2018, 3, 18, h, m)
+    ##h, m = (int(x) for x in timeend.split('-'))
+    #tend = datetime(2018, 3, 18, 20, 0)
     
-    boxes = json.load(open('voteboxes.json'))[region]
+    voteboxes = json.load(open(regions[region]['box_file']))
     
     if uiks:
-        ncams = sum(len(boxes[x]) for x in uiks)
+        ncams = sum(len(voteboxes[x]) for x in uiks)
     else:
         cams = [x for x in turnout_csv(region) if int(turnout_min) <= int(x.turnout[:-1]) <= int(turnout_max)]
         ncams = len(cams)
         uiks = set(x.uik for x in cams)
-    
-    temp = regions[region]['tmp_dir'] + '/%(tik)s/%(uik)s_%(cam)s.mp4'
-    dest = regions[region]['dst_dir'] + '/speedup/%(tik)s/%(uik)s_%(cam)s.mp4'
     
     n = 0
     for tikdir in sorted(Path(regions[region]['src_dir']).iterdir()):
@@ -205,27 +202,44 @@ def cli(uiks, turnout_min, turnout_max, timestart, timeend, region, force):
             n += 1
             print('%(n)s of %(ncams)s. %(tik)s %(uik)s %(cam)s' % locals())
             
-            urna = boxes.get(uik, {}).get(cam, {}).get('boxes')
-            if not urna:
+            boxes = voteboxes.get(uik, {}).get(cam, {}).get('boxes')
+            if not boxes:
                 print(' ...not marked')
                 continue
             
-            dst = dest % locals()
-            if exists(dst) and not force:
-                print('..skipped existing')
-                continue
+            if boxes.keys() == {'07-45'}:
+                temp = regions[region]['tmp_dir'] + '/%(tik)s/%(uik)s_%(cam)s.mp4'
+                dest = regions[region]['dst_dir'] + '/speedup/%(tik)s/%(uik)s_%(cam)s.mp4'
+            else:
+                temp = regions[region]['tmp_dir'] + '/%(tik)s/%(uik)s_%(cam)s_%(boxtstart)s.mp4'
+                dest = regions[region]['dst_dir'] + '/speedup/%(tik)s/%(uik)s_%(cam)s_%(boxtstart)s.mp4'
             
-            tmp = temp % locals()
-            if not exists(tmp):
-                if not exists(dirname(tmp)):
-                    makedirs(dirname(tmp))
-                merge(camdir.iterdir(), tmp, tstart, tend)
-            
-            if not exists(dirname(dst)):
-                makedirs(dirname(dst))
-            print('speedup: ..', end='', flush=True)
-            speedup(tmp, dst, urna)
-            os.remove(tmp)
+            timerange = sorted(boxes.keys()) + ['20-00']
+            for i in range(len(boxes)):
+                boxtstart, boxtend = timerange[i], timerange[i+1]
+                
+                dst = dest % locals()
+                if exists(dst) and not force:
+                    print('..skipped existing')
+                    continue
+                
+                tmp = temp % locals()
+                if not exists(tmp):
+                    if not exists(dirname(tmp)):
+                        makedirs(dirname(tmp))
+                        
+                    h, m = (int(x) for x in boxtstart.split('-'))
+                    tstart = datetime(2018, 3, 18, h, m)
+                    
+                    h, m = (int(x) for x in boxtend.split('-'))
+                    tend = datetime(2018, 3, 18, h, m)
+                    merge(camdir.iterdir(), tmp, tstart, tend)
+                
+                if not exists(dirname(dst)):
+                    makedirs(dirname(dst))
+                print('speedup: ..', end='', flush=True)
+                speedup(tmp, dst, urna)
+                #os.remove(tmp)
     return
             
             

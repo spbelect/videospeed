@@ -99,9 +99,20 @@ def cli(region, root=None, duration=900, maxdiff=2, file=None, quiet=False,
     
 def gapreport(root, region, report, duration=900, maxdiff=2, 
               skip_good=True, skip_diff_err=True, skip_dur_err=True, skip_invalid=True):
-    boxes = json.load(open('boxes.json'))
-    voteboxes = defaultdict(lambda: defaultdict(dict))
-    update(voteboxes, json.load(open('voteboxes.json')))
+    #boxes = json.load(open('boxes.json'))
+    #voteboxes = defaultdict(lambda: defaultdict(dict))
+    voteboxes = defaultdict(dict)
+    update(voteboxes, json.load(open(regions[region]['box_file'])))
+    #for rn in voteboxes:
+        #for uik in voteboxes[rn]:
+            #for cam in voteboxes[rn][uik].values():
+                #if cam['boxes']:
+                    #cam['boxes'] = {'07-45': cam['boxes']}
+                #else:
+                    #cam['boxes'] = {}
+        #xr = json.dumps(voteboxes[rn], indent=2, sort_keys=True, ensure_ascii=False)
+        #open(f'boxes_{rn}.json', 'wb+').write(xr.encode('utf8'))
+        
     #root = Path(root)
     #root.rename(root.parent / '2018-Spb')
     #return
