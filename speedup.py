@@ -238,7 +238,7 @@ def cli(uiks, turnout_min, turnout_max, region, force):
                 if not exists(dirname(dst)):
                     makedirs(dirname(dst))
                 print('speedup: ..', end='', flush=True)
-                speedup(tmp, dst, urna)
+                speedup(tmp, dst, boxes[boxtstart])
                 #os.remove(tmp)
     return
             

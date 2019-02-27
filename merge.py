@@ -42,7 +42,7 @@ def merge(files, dst, timestart=None, timeend=None):
         _files.append(file)
 
     ##with progress(, label='Merging') as bar:
-    echo('Merging ..', end='')
+    echo('Merging .. %s - %s' % (timestart.strftime('%H:%M'), timeend.strftime('%H:%M')), end='')
     # TODO: do not reverse, calculate inpoint instead of outpoint.
     for file in reversed(_files):
         cmd = 'ffmpeg -i %s -an -f framemd5 -c copy -' % file
