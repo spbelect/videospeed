@@ -239,7 +239,7 @@ def cli(uiks, turnout_min, turnout_max, region, force):
                     makedirs(dirname(dst))
                 print('speedup: ..', end='', flush=True)
                 speedup(tmp, dst, boxes[boxtstart])
-                #os.remove(tmp)
+                os.remove(tmp)
     return
             
             
